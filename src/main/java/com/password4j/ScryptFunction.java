@@ -16,12 +16,13 @@
  */
 package com.password4j;
 
+import com.password4j.types.Hmac;
+
 import java.security.GeneralSecurityException;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-
-import com.password4j.types.Hmac;
 
 
 /**
@@ -89,13 +90,13 @@ public class ScryptFunction extends AbstractHashingFunction
     public static ScryptFunction getInstanceFromHash(String hashed)
     {
         String[] parts = hashed.split("\\$");
-        if (parts.length == 5)
+        if (parts.length == 4)
         {
-            long params = Long.parseLong(parts[2], 16);
-            int workFactor = (int) Math.pow(2.0D, (double) (params >> 16 & 65535L));
+            long params = Long.parseLong(parts[1], 16);
+            int workFactor = (int) Math.pow(2.0D, (params >> 16 & 65535L));
             int resources = (int) params >> 8 & 255;
             int parallelization = (int) params & 255;
-            int derivedKeyLength = Utils.decodeBase64(parts[4]).length;
+            int derivedKeyLength = Utils.decodeBase64(parts[3]).length;
 
             return ScryptFunction.getInstance(workFactor, resources, parallelization, derivedKeyLength);
         }
@@ -238,29 +239,44 @@ public class ScryptFunction extends AbstractHashingFunction
     public Hash hash(CharSequence plainTextPassword)
     {
         byte[] salt = SaltGenerator.generate();
-        return internalHash(plainTextPassword, salt);
+        return internalHash(Utils.fromCharSequenceToBytes(plainTextPassword), salt);
+    }
+
+    @Override
+    public Hash hash(byte[] plainTextPasswordAsBytes)
+    {
+        byte[] salt = SaltGenerator.generate();
+        return internalHash(plainTextPasswordAsBytes, salt);
     }
 
     @Override
     public Hash hash(CharSequence plainTextPassword, String salt)
     {
         byte[] saltAsBytes = Utils.fromCharSequenceToBytes(salt);
-        return internalHash(plainTextPassword, saltAsBytes);
+        byte[] plainTextPasswordAsBytes = Utils.fromCharSequenceToBytes(plainTextPassword);
+        return internalHash(plainTextPasswordAsBytes, saltAsBytes);
     }
 
-    private Hash internalHash(CharSequence plainTextPassword, byte[] salt)
+    @Override
+    public Hash hash(byte[] plainTextPasswordAsBytes, byte[] salt)
     {
-        String stringedSalt = Utils.fromBytesToString(salt);
+        return internalHash(plainTextPasswordAsBytes, salt);
+    }
+
+    private Hash internalHash(byte[] plainTextPassword, byte[] salt)
+    {
+
         try
         {
-            byte[] derived = scrypt(Utils.fromCharSequenceToBytes(plainTextPassword), salt, derivedKeyLength);
+            byte[] derived = scrypt(plainTextPassword, salt, derivedKeyLength);
             String params = Long.toString((long) Utils.log2(workFactor) << 16 | (long) resources << 8 | parallelization, 16);
-            String sb = "$s0$" + params + '$' + Utils.encodeBase64(salt) + '$'
+            String sb = "$" + params + '$' + Utils.encodeBase64(salt) + '$'
                     + Utils.encodeBase64(derived);
-            return new Hash(this, sb, derived, stringedSalt);
+            return new Hash(this, sb, derived, salt);
         }
         catch (IllegalArgumentException | GeneralSecurityException e)
         {
+            String stringedSalt = Utils.fromBytesToString(salt);
             String message = "Invalid specification with salt=" + stringedSalt + ", N=" + workFactor + ", r=" + resources + " and p=" + parallelization;
             throw new BadParametersException(message, e);
         }
@@ -269,14 +285,20 @@ public class ScryptFunction extends AbstractHashingFunction
     @Override
     public boolean check(CharSequence plainTextPassword, String hashed)
     {
+        return check(Utils.fromCharSequenceToBytes(plainTextPassword), Utils.fromCharSequenceToBytes(hashed));
+    }
+
+    @Override
+    public boolean check(byte[] plainTextPassword, byte[] hashed)
+    {
         try
         {
-            String[] parts = hashed.split("\\$");
-            if (parts.length == 5 && parts[1].equals("s0"))
+            List<byte[]> parts = Utils.split(hashed, (byte) 36);
+            if (parts.size() == 4)
             {
-                byte[] salt = Utils.decodeBase64(parts[3]);
-                byte[] derived0 = Utils.decodeBase64(parts[4]);
-                byte[] derived1 = scrypt(Utils.fromCharSequenceToBytes(plainTextPassword), salt, derivedKeyLength);
+                byte[] salt = Utils.decodeBase64(parts.get(2));
+                byte[] derived0 = Utils.decodeBase64(parts.get(3));
+                byte[] derived1 = scrypt(plainTextPassword, salt, derivedKeyLength);
                 return slowEquals(derived0, derived1);
             }
             else
@@ -284,9 +306,9 @@ public class ScryptFunction extends AbstractHashingFunction
                 throw new BadParametersException("Invalid hashed value");
             }
         }
-        catch (GeneralSecurityException var14)
+        catch (GeneralSecurityException gse)
         {
-            throw new IllegalStateException("JVM doesn't support SHA1PRNG or HMAC_SHA256?");
+            throw new IllegalStateException("JVM doesn't support SHA1PRNG or HMAC_SHA256?", gse);
         }
     }
 

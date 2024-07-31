@@ -1,12 +1,78 @@
 # Changelog
 
-## [1.6.0](https://github.com/Password4j/password4j/releases/tag/1.6.0) - (Coming soon)
+# [1.8.2](https://github.com/Password4j/password4j/releases/tag/1.8.2) - (2024-05-01)
+### Fixed
+*  Multi thread algorithms use daemon threads in order to not block the application shutdown if there is no explicit `System.exit()` ([#151](../../issues/151))
+*  Password4j works even when there is no access to `psw4j.properties` file due to restrictive security policies ([#153](../../issues/153))
+
+
+## [1.8.1](https://github.com/Password4j/password4j/releases/tag/1.8.1) - (2024-03-08)
+### Fixed
+* `Argon2Function#internalHash(...)` used a double conversion from `byte[]` to `String` and back to `byte[]` that created inconsistencies in `Hash#salt  ([#143](../../issues/143))
+
+### Changed
+* `Hash#Hash(HashingFunction, String, byte[], String)` marked deprecated
+
+## [1.8.0](https://github.com/Password4j/password4j/releases/tag/1.8.0) - (2024-03-03)
+### Added
+* Balloon Hashing implementation ([#131](../../issues/131))
+
+### Fixed
+* Parallelism is achieved by an `ExecutorService` instantiated during object creation instead of during the hashing process
+
+### Changed
+* Banner is disabled by default
+
+## [1.7.3](https://github.com/Password4j/password4j/releases/tag/1.7.3) - (2023-09-14)
+### Fixed
+* Wrong hashes when the password contains non ISO 8859-1 characters ([#126](../../issues/126))
+
+
+## [1.7.2](https://github.com/Password4j/password4j/releases/tag/1.7.2) - (2023-08-20)
+### Fixed
+* Suppressed warning for usage of `java.security.AccessController`. This is how the java development team fixed the problem for the moment ([#119](../../issues/119))
+* In some custom JDK implementations `java.security.Provider#getServices()` can return `null` instead of empty `java.security.Provider.Service[]` ([#120](../../issues/120))
+
+
+## [1.7.1](https://github.com/Password4j/password4j/releases/tag/1.7.1) - (2023-06-02)
+### Fixed
+* Bcrypt used negative rounds when cost factor = 31 ([#114](../../issues/114))
+
+## [1.7.0](https://github.com/Password4j/password4j/releases/tag/1.7.0) - (2023-02-18)
+### Added
+* APIs now accepts `byte[]` arguments ([#99](../../issues/99))
+* `.forceUpdate()` forces Password4j to recalculate a new hash even if the parameters didn't change ([#102](../../issues/102))
+* configurable salt length with property `global.salt.length` when using `#addRandomSalt()` ([#97](../../issues/97))
+### Changed
+* `.andUpdate()` no more recalculations of the hash if the algorithm, salt or pepper changed from the hash found in `Password.check()` ([#102](../../issues/102))
+### Fixed
+* Inconsistency between public and internal APIs for Argon2 ([#93](../../issues/93))
+
+## [1.6.3](https://github.com/Password4j/password4j/releases/tag/1.6.3) - (2022-12-08)
+### Fixed
+* Inconsistency of Argon2 with some kind of salts generated from external libraries [#92](../../issues/92)
+
+## [1.6.2](https://github.com/Password4j/password4j/releases/tag/1.6.2) - (2022-10-20)
+### Added
+* Application banner ([#83](../../issues/83)).
+### Fixed
+* Typo for issue [#80](../../issues/80)
+### Removed
+* Dependencies to Apache Commons Text, which had been vulnerable to arbitrary code execution in the past ([#84](../../issues/84)).
+
+## [1.6.1](https://github.com/Password4j/password4j/releases/tag/1.6.1) - (2022-10-07)
+### Changed
+* Algorithms' default values are aligned to [OWASP recommendation](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) ([#80](../../issues/80))
+
+## [1.6.0](https://github.com/Password4j/password4j/releases/tag/1.6.0) - (2022-06-17)
 ### Changed
 * `BCryptFunction`, `SCryptFunction`, `#withBCrypt()`, `#withSCrypt()`, `getBCryptInstance()`, `getSCryptInstance()` to `BcryptFunction`, `ScryptFunction`, `#withBcrypt()`, `#withScrypt()`, `getBcryptInstance()`, `getScryptInstance()` ([#36](../../issues/36)).
+### Fixed
+* Scrypt never prepends `$s0` to the result ([#64](../../issues/64)).
 
 ## [1.5.4](https://github.com/Password4j/password4j/releases/tag/1.5.4) - (2021-11-19)
 ### Fixed
-* Removed `slf4j-nop` which can cause issues if not excluded from the dependency tree ([#46](../../issues/46) 
+* Removed `slf4j-nop` which can cause issues if not excluded from the dependency tree ([#46](../../issues/46)) 
 
 ## [1.5.3](https://github.com/Password4j/password4j/releases/tag/1.5.3) - (2021-04-14)
 ### Fixed

@@ -25,13 +25,11 @@ package com.password4j;
  */
 public class HashChecker
 {
-    private String hashed;
-
-    private String salt;
-
+    protected byte[] hashed;
+    protected byte[] salt;
+    private byte[] plainTextPassword;
     private CharSequence pepper;
 
-    private CharSequence plainTextPassword;
 
     @SuppressWarnings("unused")
     private HashChecker()
@@ -45,6 +43,17 @@ public class HashChecker
      * @since 1.0.0
      */
     HashChecker(CharSequence plainTextPassword, String hashed)
+    {
+        this.hashed = Utils.fromCharSequenceToBytes(hashed);
+        this.plainTextPassword = Utils.fromCharSequenceToBytes(plainTextPassword);
+    }
+
+    /**
+     * @param plainTextPassword the plain text password as bytes array
+     * @param hashed            the hash to verify as bytes array
+     * @since 1.7.0
+     */
+    HashChecker(byte[] plainTextPassword, byte[] hashed)
     {
         this.hashed = hashed;
         this.plainTextPassword = plainTextPassword;
@@ -87,6 +96,20 @@ public class HashChecker
      */
     public HashChecker addSalt(String salt)
     {
+        this.salt = Utils.fromCharSequenceToBytes(salt);
+        return this;
+    }
+
+    /**
+     * Add a cryptographic salt in the verifying process.
+     * The salt is applied differently depending on the chosen algorithm.
+     *
+     * @param salt cryptographic salt as bytes array
+     * @return this builder
+     * @since 1.7.0
+     */
+    public HashChecker addSalt(byte[] salt)
+    {
         this.salt = salt;
         return this;
     }
@@ -117,7 +140,7 @@ public class HashChecker
      */
     public boolean with(HashingFunction hashingFunction)
     {
-        if (plainTextPassword == null)
+        if (plainTextPassword == null || plainTextPassword.length == 0)
         {
             return false;
         }
@@ -216,7 +239,7 @@ public class HashChecker
      * then the default parameters are used.
      *
      * @return true if the hash was produced by the given plain text password; false otherwise.
-     * @see AlgorithmFinder#getArgon2Instance() ()
+     * @see AlgorithmFinder#getArgon2Instance()
      * @since 1.5.0
      */
     public boolean withArgon2()
@@ -225,9 +248,32 @@ public class HashChecker
         return with(argon2);
     }
 
+    /**
+     * Check if the previously given hash was produced from the given plain text password
+     * with {@link BalloonHashingFunction}.
+     * <p>
+     * This method reads the configurations in the `psw4j.properties` file. If no configuration is found,
+     * then the default parameters are used.
+     *
+     * @return true if the hash was produced by the given plain text password; false otherwise.
+     * @see AlgorithmFinder#getBalloonHashingInstance()
+     * @since 1.5.0
+     */
+    public boolean withBalloonHashing()
+    {
+        BalloonHashingFunction balloon = AlgorithmFinder.getBalloonHashingInstance();
+        return with(balloon);
+    }
+
+    /**
+     * This method returns the String version of the hash bytes. This
+     * should be always a safe operation when using ISO-8859-1 encoding.
+     *
+     * @return String version of the hash
+     */
     protected String getHashed()
     {
-        return hashed;
+        return Utils.fromBytesToString(hashed);
     }
 
 }

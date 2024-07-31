@@ -1,5 +1,5 @@
 /*
- *  (C) Copyright 2021 Password4j (http://password4j.com/).
+ *  (C) Copyright 2022 Password4j (http://password4j.com/).
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -15,26 +15,19 @@
  *
  */
 
-package com.password4j.types;
 
-public enum Bcrypt
+public class Service
 {
-    A, B, X, Y;
 
-    public static Bcrypt valueOf(char minor)
+    static String getPasswordFromDatabaseForCurrentUser()
     {
-        for (Bcrypt type : Bcrypt.values())
-        {
-            if (type.minor() == minor)
-            {
-                return type;
-            }
-        }
-        return null;
+        return "8a0bee289129817329727eb05f9a81a5";
     }
 
-    public char minor()
+    static void storePasswordInDatabase(String hash)
     {
-        return name().toLowerCase().charAt(0);
+        return;
     }
+
+
 }

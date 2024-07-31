@@ -16,26 +16,37 @@
  */
 package com.password4j;
 
-import static org.junit.Assert.assertTrue;
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
+import java.security.CodeSource;
+import java.security.PermissionCollection;
+import java.security.Permissions;
+import java.security.Policy;
+import java.security.Provider;
+import java.security.SecureRandom;
+import java.security.Security;
+import java.util.Random;
+
+import org.junit.Assert;
+import org.junit.Test;
 
 import com.password4j.types.Argon2;
 import com.password4j.types.Bcrypt;
 import com.password4j.types.Hmac;
 
-import org.apache.commons.lang3.RandomStringUtils;
-import org.apache.commons.lang3.StringUtils;
-import org.junit.Assert;
-import org.junit.Test;
-
-import java.security.SecureRandom;
-import java.util.Random;
+import static org.junit.Assert.*;
 
 
 public class PasswordTest
 {
 
     private static final String PASSWORD = "password";
+
+    private static final byte[] PASSWORD_BYTES = PASSWORD.getBytes(StandardCharsets.UTF_8);
     private static final String SALT = "salt";
+
+    private static final byte[] SALT_BYTES = SALT.getBytes(StandardCharsets.UTF_8);
     private static final String PEPPER = "pepper";
 
     private static final SecureString SECURE_PASSWORD = new SecureString(PASSWORD.toCharArray());
@@ -71,6 +82,7 @@ public class PasswordTest
 
         // THEN
         assertTrue(strategy.check(PEPPER + PASSWORD, hashed));
+        assertTrue(Password.check(PASSWORD_BYTES, hash));
         assertTrue(Password.check(PASSWORD, hashed).addPepper(PEPPER).withCompressedPBKDF2());
     }
 
@@ -86,6 +98,7 @@ public class PasswordTest
 
         // THEN
         assertTrue(strategy.check(PEPPER + PASSWORD, hashed));
+        assertTrue(Password.check(PASSWORD_BYTES, hash));
         assertTrue(Password.check(PASSWORD, hashed).addPepper(PEPPER).withBcrypt());
     }
 
@@ -101,6 +114,7 @@ public class PasswordTest
 
         // THEN
         assertTrue(strategy.check(PEPPER + PASSWORD, hashed));
+        assertTrue(Password.check(PASSWORD_BYTES, hash));
         assertTrue(Password.check(PASSWORD, hashed).addPepper(PEPPER).withScrypt());
     }
 
@@ -117,6 +131,7 @@ public class PasswordTest
 
         // THEN
         assertTrue(strategy.check(PEPPER + PASSWORD + SALT, hashed));
+        assertTrue(Password.check(PASSWORD_BYTES, hash));
         assertTrue(Password.check(PASSWORD, hashed).addSalt(SALT).addPepper(PEPPER).withMessageDigest());
     }
 
@@ -132,7 +147,89 @@ public class PasswordTest
 
         // THEN
         assertTrue(strategy.check(PASSWORD, hashed));
+        assertTrue(Password.check(PASSWORD_BYTES, hash));
         assertTrue(Password.check(PASSWORD, hashed).addSalt(SALT).withArgon2());
+    }
+
+    @Test
+    public void testRawCheckBytes1()
+    {
+        // GIVEN
+        Hash hash = Password.hash(PASSWORD_BYTES).addPepper(PEPPER).addSalt(SALT_BYTES).withCompressedPBKDF2();
+        String hashed = hash.getResult();
+
+        // WHEN
+        PBKDF2Function strategy = CompressedPBKDF2Function.getInstanceFromHash(hashed);
+
+        // THEN
+        assertTrue(strategy.check(PEPPER + PASSWORD, hashed));
+        assertTrue(Password.check(PASSWORD_BYTES, hash));
+        assertTrue(Password.check(PASSWORD_BYTES, hashed.getBytes()).addPepper(PEPPER).withCompressedPBKDF2());
+    }
+
+    @Test
+    public void testRawCheckBytes2()
+    {
+        // GIVEN
+        Hash hash = Password.hash(PASSWORD_BYTES).addPepper(PEPPER).withBcrypt();
+        String hashed = hash.getResult();
+
+        // WHEN
+        BcryptFunction strategy = AlgorithmFinder.getBcryptInstance();
+
+        // THEN
+        assertTrue(strategy.check(PEPPER + PASSWORD, hashed));
+        assertTrue(Password.check(PASSWORD_BYTES, hash));
+        assertTrue(Password.check(PASSWORD_BYTES, hashed.getBytes()).addPepper(PEPPER).withBcrypt());
+    }
+
+    @Test
+    public void testRawCheckBytes3()
+    {
+        // GIVEN
+        Hash hash = Password.hash(PASSWORD_BYTES).addPepper(PEPPER).addSalt(SALT_BYTES).withScrypt();
+        String hashed = hash.getResult();
+
+        // WHEN
+        ScryptFunction strategy = ScryptFunction.getInstanceFromHash(hashed);
+
+        // THEN
+        assertTrue(strategy.check(PEPPER + PASSWORD, hashed));
+        assertTrue(Password.check(PASSWORD_BYTES, hash));
+        assertTrue(Password.check(PASSWORD_BYTES, hashed.getBytes()).addPepper(PEPPER).withScrypt());
+    }
+
+
+    @Test
+    public void testRawCheckBytes4()
+    {
+        // GIVEN
+        Hash hash = Password.hash(PASSWORD_BYTES).addPepper(PEPPER).addSalt(SALT_BYTES).withMessageDigest();
+        String hashed = hash.getResult();
+
+        // WHEN
+        MessageDigestFunction strategy = MessageDigestFunction.getInstance("SHA-512");
+
+        // THEN
+        assertTrue(strategy.check(PEPPER + PASSWORD + SALT, hashed));
+        assertTrue(Password.check(PASSWORD_BYTES, hash));
+        assertTrue(Password.check(PASSWORD_BYTES, hashed.getBytes()).addSalt(SALT_BYTES).addPepper(PEPPER).withMessageDigest());
+    }
+
+    @Test
+    public void testRawCheckBytes5()
+    {
+        // GIVEN
+        Hash hash = Password.hash(PASSWORD_BYTES).addSalt(SALT_BYTES).withArgon2();
+        String hashed = hash.getResult();
+
+        // WHEN
+        Argon2Function strategy = Argon2Function.getInstanceFromHash(hashed);
+
+        // THEN
+        assertTrue(strategy.check(PASSWORD_BYTES, hashed.getBytes()));
+        assertTrue(Password.check(PASSWORD_BYTES, hash));
+        assertTrue(Password.check(PASSWORD_BYTES, hashed.getBytes()).addSalt(SALT_BYTES).withArgon2());
     }
 
     @Test
@@ -211,6 +308,36 @@ public class PasswordTest
         Assert.assertEquals(Password.hash(PASSWORD).addPepper("newpepper").addSalt("newsalt").withArgon2().getResult(), update.getHash().getResult());
     }
 
+    @Test
+    public void testRawUpdate6()
+    {
+        // GIVEN
+        Hash hash = Password.hash(PASSWORD.getBytes(StandardCharsets.UTF_8)).addPepper(PEPPER).withBcrypt();
+
+        // WHEN
+        HashUpdate update = Password.check(PASSWORD.getBytes(StandardCharsets.UTF_8), hash.getResultAsBytes()).addPepper(PEPPER).addSalt(SALT.getBytes(StandardCharsets.UTF_8))
+                .andUpdate().addNewSalt("$2a$07$W3mOfB5auMDG3EitumH0S.").addNewPepper("newpepper").withBcrypt();
+
+        // THEN
+        assertTrue(update.isVerified());
+        Assert.assertEquals(Password.hash(PASSWORD.getBytes(StandardCharsets.UTF_8)).addPepper("newpepper").addSalt("$2a$07$W3mOfB5auMDG3EitumH0S.").withBcrypt().getResult(), update.getHash().getResult());
+    }
+
+    @Test
+    public void testRawUpdate7()
+    {
+        // GIVEN
+        Hash hash = Password.hash(PASSWORD).addPepper(PEPPER).addSalt(SALT).withScrypt();
+
+        // WHEN
+        HashUpdate update = Password.check(PASSWORD, hash.getResult()).addPepper(PEPPER).addSalt(SALT)
+                .andUpdate().addNewSalt("newsalt").addNewPepper("newpepper").withScrypt();
+
+        // THEN
+        assertTrue(update.isVerified());
+        Assert.assertEquals(Password.hash(PASSWORD).addPepper("newpepper").addSalt("newsalt").withScrypt().getResult(), update.getHash().getResult());
+    }
+
 
 
     @Test
@@ -273,14 +400,89 @@ public class PasswordTest
     public void testMigration4()
     {
         // GIVEN
-        Hash oldHash = Password.hash(PASSWORD).addPepper(PEPPER).addSalt(SALT).withMessageDigest();
+        Hash oldHash = Password.hash(PASSWORD_BYTES).addPepper(PEPPER).addSalt(SALT_BYTES).withMessageDigest();
 
         // WHEN
-        HashUpdate update = Password.check(PASSWORD, oldHash.getResult()).addPepper(PEPPER).addSalt(SALT)
+        HashUpdate update = Password.check(PASSWORD_BYTES, oldHash.getResultAsBytes()).addPepper(PEPPER).addSalt(SALT_BYTES)
                 .andUpdate()
                 .with(AlgorithmFinder.getMessageDigestInstance(), AlgorithmFinder.getArgon2Instance());
 
-        boolean newCheck = Password.check(PASSWORD, update.getHash().getResult()).addPepper(PEPPER).withArgon2();
+        boolean newCheck = Password.check(PASSWORD_BYTES, update.getHash().getResultAsBytes()).addPepper(PEPPER).withArgon2();
+
+
+        // THEN
+        assertTrue(update.isVerified());
+        assertTrue(newCheck);
+    }
+
+    @Test
+    public void testMigrationBytes1()
+    {
+        // GIVEN
+        Hash oldHash = Password.hash(PASSWORD_BYTES).addPepper(PEPPER).addSalt(SALT_BYTES).withCompressedPBKDF2();
+
+        // WHEN
+        boolean oldCheck = Password.check(PASSWORD_BYTES, oldHash.getResultAsBytes()).addPepper(PEPPER).withCompressedPBKDF2();
+        Hash newHash = Password.hash(PASSWORD_BYTES).addSalt(PEPPER).withScrypt();
+        boolean newCheck = Password.check(PASSWORD_BYTES, newHash.getResultAsBytes()).withScrypt();
+
+
+        // THEN
+        assertTrue(oldCheck);
+        assertTrue(newCheck);
+
+    }
+
+    @Test
+    public void testMigrationBytes2()
+    {
+        // GIVEN
+        Hash oldHash = Password.hash(PASSWORD_BYTES).addPepper(PEPPER).addSalt(SALT_BYTES).withCompressedPBKDF2();
+
+        // WHEN
+        HashUpdate update = Password.check(PASSWORD_BYTES, oldHash.getResultAsBytes()).addPepper(PEPPER)
+                .andUpdate()
+                .with(AlgorithmFinder.getCompressedPBKDF2Instance(), AlgorithmFinder.getScryptInstance());
+
+        boolean newCheck = Password.check(PASSWORD_BYTES, update.getHash().getResultAsBytes()).addPepper(PEPPER).withScrypt();
+
+
+        // THEN
+        assertTrue(update.isVerified());
+        assertTrue(newCheck);
+    }
+
+    @Test
+    public void testMigrationBytes3()
+    {
+        // GIVEN
+        Hash oldHash = Password.hash(PASSWORD_BYTES).addPepper(PEPPER).addSalt(SALT_BYTES).withMessageDigest();
+
+        // WHEN
+        HashUpdate update = Password.check(PASSWORD_BYTES, oldHash.getResultAsBytes()).addPepper(PEPPER).addSalt(SALT_BYTES)
+                .andUpdate()
+                .with(AlgorithmFinder.getMessageDigestInstance(), AlgorithmFinder.getScryptInstance());
+
+        boolean newCheck = Password.check(PASSWORD_BYTES, update.getHash().getResultAsBytes()).addPepper(PEPPER).withScrypt();
+
+
+        // THEN
+        assertTrue(update.isVerified());
+        assertTrue(newCheck);
+    }
+
+    @Test
+    public void testMigrationBytes4()
+    {
+        // GIVEN
+        Hash oldHash = Password.hash(PASSWORD_BYTES).addPepper(PEPPER).addSalt(SALT_BYTES).withMessageDigest();
+
+        // WHEN
+        HashUpdate update = Password.check(PASSWORD_BYTES, oldHash.getResultAsBytes()).addPepper(PEPPER).addSalt(SALT_BYTES)
+                .andUpdate()
+                .with(AlgorithmFinder.getMessageDigestInstance(), AlgorithmFinder.getArgon2Instance());
+
+        boolean newCheck = Password.check(PASSWORD_BYTES, update.getHash().getResultAsBytes()).addPepper(PEPPER).withArgon2();
 
 
         // THEN
@@ -301,7 +503,7 @@ public class PasswordTest
 
         // THEN
         assertTrue(check1);
-        assertTrue(StringUtils.isNotEmpty(hash.getSalt()));
+        assertTrue(hash.getSalt() != null && hash.getSalt().length() > 0);
     }
 
 
@@ -317,7 +519,7 @@ public class PasswordTest
 
         // THEN
         assertTrue(check1);
-        assertTrue(StringUtils.isNotEmpty(hash.getSalt()));
+        assertTrue(hash.getSalt() != null && hash.getSalt().length() > 0);
     }
 
 
@@ -349,7 +551,7 @@ public class PasswordTest
     @Test(expected = BadParametersException.class)
     public void testBad1()
     {
-        Password.hash(null);
+        Password.hash((byte[]) null);
     }
 
     @Test(expected = BadParametersException.class)
@@ -383,13 +585,13 @@ public class PasswordTest
     @Test(expected = BadParametersException.class)
     public void testBad7()
     {
-        Password.check(null, (Hash)null);
+        Password.check((CharSequence) null, (Hash)null);
     }
 
     @Test(expected = BadParametersException.class)
     public void testBad8()
     {
-        Password.check(PASSWORD, new Hash(null, null, null, null));
+        Password.check(PASSWORD, new Hash(null, null, null, (String) null));
     }
 
     @Test
@@ -514,7 +716,7 @@ public class PasswordTest
 
         // THEN
         assertTrue(check1);
-        assertTrue(StringUtils.isNotEmpty(hash.getSalt()));
+        assertTrue(hash.getSalt() != null && hash.getSalt().length() > 0);
     }
 
 
@@ -530,7 +732,7 @@ public class PasswordTest
 
         // THEN
         assertTrue(check1);
-        assertTrue(StringUtils.isNotEmpty(hash.getSalt()));
+        assertTrue(hash.getSalt() != null && hash.getSalt().length() > 0);
     }
 
 
@@ -566,7 +768,7 @@ public class PasswordTest
     @Test(expected = BadParametersException.class)
     public void testBad8SecureString()
     {
-        Password.check(SECURE_PASSWORD, new Hash(null, null, null, null));
+        Password.check(SECURE_PASSWORD, new Hash(null, null, null, (String) null));
     }
 
     @Test
@@ -593,7 +795,7 @@ public class PasswordTest
         boolean result = hc.with(AlgorithmFinder.getPBKDF2Instance());
 
         // THEN
-        Assert.assertFalse(result);
+        assertFalse(result);
     }
 
     @Test
@@ -639,7 +841,7 @@ public class PasswordTest
         Assert.assertEquals(pepper, hash.getPepper());
         Assert.assertEquals(prefix + salt, update.getHash().getSalt());
         Assert.assertEquals(prefix + salt, update.getHash().getSalt());
-
+        Assert.assertTrue(update.isUpdated());
     }
 
     @Test
@@ -655,7 +857,7 @@ public class PasswordTest
         assertTrue(update.isVerified());
         Assert.assertEquals(hash.getSalt(), update.getHash().getSalt());
         Assert.assertEquals(hash.getPepper(), update.getHash().getPepper());
-
+        Assert.assertTrue(update.isUpdated());
     }
 
 
@@ -669,24 +871,29 @@ public class PasswordTest
         HashUpdate update = Password.check(password, "hash").addSalt("salt")
                 .andUpdate().addNewSalt(hash.getSalt()).withPBKDF2();
 
-        Assert.assertFalse(update.isVerified());
+        assertFalse(update.isVerified());
         Assert.assertNotNull(update);
         Assert.assertNull(update.getHash());
+        assertFalse(update.isUpdated());
     }
 
-    @Test(expected = BadParametersException.class)
+    @Test
     public void testGenericUpdate4()
     {
         String password = "password";
 
-        Hash hash = Password.hash(password).withPBKDF2();
+        try {
+            Hash hash = Password.hash(password).withPBKDF2();
 
-        HashUpdate update = Password.check(password, "hash")
-                .andUpdate().addNewSalt(hash.getSalt()).withPBKDF2();
-
-        Assert.assertFalse(update.isVerified());
-        Assert.assertNotNull(update);
-        Assert.assertNull(update.getHash());
+            HashUpdate update = Password.check(password, "hash")
+                    .andUpdate().addNewSalt(hash.getSalt()).withPBKDF2();
+            assertFalse(update.isVerified());
+            Assert.assertNotNull(update);
+            Assert.assertNull(update.getHash());
+            assertFalse(update.isUpdated());
+        } catch (Exception ex) {
+            assertTrue(ex instanceof BadParametersException);
+        }
     }
 
 
@@ -710,7 +917,98 @@ public class PasswordTest
         assertTrue(updateSalt.getHash().getPepper() == null && updateFixedSalt.getHash().getPepper() == null);
         assertTrue(updateSalt.getHash().getSalt() != null && updateFixedSalt.getHash().getSalt() != null && updateFixedSaltPepper.getHash().getSalt() != null);
         Assert.assertEquals(PropertyReader.readString("global.pepper", null, null), updateFixedSaltPepper.getHash().getPepper());
+        Assert.assertTrue(updateSalt.isUpdated());
+        Assert.assertTrue(updateFixedSalt.isUpdated());
+        Assert.assertTrue(updateFixedSaltPepper.isUpdated());
+    }
 
+
+    @Test
+    public void testGenericUpdate6()
+    {
+        String password = "password";
+
+        HashingFunction oldFunction = ScryptFunction.getInstance(1024, 4, 2);
+        Hash hash = Password.hash(password).with(oldFunction);
+
+        HashUpdate notUpdated1 = Password.check(password, hash.getResult())
+                .andUpdate().with(oldFunction, oldFunction);
+
+        HashUpdate updated1 = Password.check(password, hash.getResult())
+                .andUpdate().addNewRandomSalt().with(oldFunction, oldFunction);
+
+        HashUpdate updated2 = Password.check(password, hash.getResult())
+                .andUpdate().addNewPepper("pepper").with(oldFunction, oldFunction);
+
+        HashUpdate updated3 = Password.check(password, hash.getResult())
+                .andUpdate().with(oldFunction, BcryptFunction.getInstance(5));
+
+        HashUpdate updated4 = Password.check(password, hash.getResult())
+                .andUpdate().with(oldFunction, ScryptFunction.getInstance(512, 4, 2));
+
+        HashUpdate updated5 = Password.check(password, hash.getResult())
+                .andUpdate().forceUpdate().with(oldFunction, oldFunction);
+
+
+        assertFalse(notUpdated1.isUpdated());
+        assertTrue(updated1.isUpdated());
+        assertTrue(updated2.isUpdated());
+        assertTrue(updated3.isUpdated());
+        assertTrue(updated4.isUpdated());
+        assertTrue(updated5.isUpdated());
+    }
+
+    @Test
+    public void testGenericUpdate7()
+    {
+        String password = "password";
+
+        HashingFunction oldFunction = BcryptFunction.getInstance(6);
+        Hash hash = Password.hash(password).with(oldFunction);
+
+        HashUpdate notUpdated = Password.check(password, hash.getResult())
+                .andUpdate().with(oldFunction, oldFunction);
+
+        HashUpdate updated = Password.check(password, hash.getResult())
+                .andUpdate().forceUpdate().with(oldFunction, oldFunction);
+
+        assertFalse(notUpdated.isUpdated());
+        assertTrue(updated.isUpdated());
+        assertNotEquals(hash.getSalt(), updated.getHash().getSalt());
+    }
+
+    @Test
+    public void testGenericUpdateBytes()
+    {
+
+        HashingFunction oldFunction = ScryptFunction.getInstance(1024, 4, 2);
+        Hash hash = Password.hash(PASSWORD_BYTES).with(oldFunction);
+
+        HashUpdate notUpdated1 = Password.check(PASSWORD_BYTES, hash.getResultAsBytes())
+                .andUpdate().with(oldFunction, oldFunction);
+
+        HashUpdate updated1 = Password.check(PASSWORD_BYTES, hash.getResultAsBytes())
+                .andUpdate().addNewSalt(new byte[]{100, 101, 102, 103}).with(oldFunction, oldFunction);
+
+        HashUpdate updated2 = Password.check(PASSWORD_BYTES, hash.getResultAsBytes())
+                .andUpdate().addNewPepper("pepper").with(oldFunction, oldFunction);
+
+        HashUpdate updated3 = Password.check(PASSWORD_BYTES, hash.getResultAsBytes())
+                .andUpdate().with(oldFunction, BcryptFunction.getInstance(5));
+
+        HashUpdate updated4 = Password.check(PASSWORD_BYTES, hash.getResultAsBytes())
+                .andUpdate().with(oldFunction, ScryptFunction.getInstance(512, 4, 2));
+
+        HashUpdate updated5 = Password.check(PASSWORD_BYTES, hash.getResultAsBytes())
+                .andUpdate().forceUpdate().with(oldFunction, oldFunction);
+
+
+        assertFalse(notUpdated1.isUpdated());
+        assertTrue(updated1.isUpdated());
+        assertTrue(updated2.isUpdated());
+        assertTrue(updated3.isUpdated());
+        assertTrue(updated4.isUpdated());
+        assertTrue(updated5.isUpdated());
     }
 
     @Test
@@ -726,18 +1024,18 @@ public class PasswordTest
         /*
          * This password hash was generated using com.lambdaworks:scrypt, which has a derived key length (dkLen) of 32 bytes.
          */
-        final String testHash = "$s0$e0801$fl+gNAicpGG4gLMkUTCvLw==$N5wE1IKsr4LPBoetJVW6jLzEH4kTVXuKGafvAA8Z+88=";
+        final String testHash = "$e0801$fl+gNAicpGG4gLMkUTCvLw==$N5wE1IKsr4LPBoetJVW6jLzEH4kTVXuKGafvAA8Z+88=";
         assertTrue(Password.check("Hello world!", testHash).with(ScryptFunction.getInstanceFromHash(testHash)));
     }
 
     @Test
     public void testArgon2NonstandardParams()
     {
-        /*
-         * This password hash comes from the Argon2 C reference implementation (https://github.com/P-H-C/phc-winner-argon2).
-         */
+        // This password hash comes from the Argon2 C reference implementation (https://github.com/P-H-C/phc-winner-argon2).
+
         final String testHash = "$argon2i$v=19$m=65536,t=2,p=4$c29tZXNhbHQ$RdescudvJCsgt3ub+b+dWRWJTmaaJObG";
-        assertTrue(Password.check("password", testHash).with(Argon2Function.getInstanceFromHash(testHash)));
+        Argon2Function argon2Function = Argon2Function.getInstanceFromHash(testHash);
+        assertTrue(Password.check("password", testHash).with(argon2Function));
     }
 
 
@@ -756,9 +1054,9 @@ public class PasswordTest
         for(int i = 0; i < max; i++, c++)
         {
             int length = RANDOM.nextInt(c);
-            String password = RandomStringUtils.randomPrint(length);
-            String salt = RandomStringUtils.randomPrint(32);
-            String pepper = RandomStringUtils.randomPrint(16);
+            String password = Utils.randomPrintable(length);
+            String salt = Utils.randomPrintable(32);
+            String pepper =Utils.randomPrintable(16);
 
             for(HashingFunction function : functions)
             {
@@ -766,7 +1064,6 @@ public class PasswordTest
                 if(function instanceof BcryptFunction)
                 {
                     hash = Password.hash(password).addPepper(pepper).with(function);
-
                 }
                 else
                 {
@@ -789,7 +1086,180 @@ public class PasswordTest
                 .addPepper("shared-secret")
                 .with(bcrypt);
 
-        System.out.println(verified);
+        Assert.assertTrue(verified);
     }
 
+    @Test
+    public void testBanner()
+    {
+        ByteArrayOutputStream outputStreamCaptor = new ByteArrayOutputStream();
+
+        PropertyReader.properties.setProperty("global.banner", "false");
+
+        Utils.printBanner(new PrintStream(outputStreamCaptor));
+        Assert.assertEquals(0, outputStreamCaptor.toString().length());
+
+        PropertyReader.properties.setProperty("global.banner", "true");
+
+    }
+
+    @Test
+    public void testBanner2()
+    {
+        ByteArrayOutputStream outputStreamCaptor = new ByteArrayOutputStream();
+
+        Provider[] oldProviders = Security.getProviders();
+        for (Provider provider : oldProviders)
+        {
+            for (Provider.Service service : provider.getServices())
+            {
+                if ("SecretKeyFactory".equals(service.getType()) && service.getAlgorithm().startsWith("PBKDF2"))
+                {
+                    Security.removeProvider(provider.getName());
+                }
+            }
+        }
+
+        Utils.printBanner(new PrintStream(outputStreamCaptor));
+        Assert.assertTrue(outputStreamCaptor.toString().indexOf("❌") > 0);
+        Assert.assertTrue(outputStreamCaptor.toString().indexOf(System.getProperty("java.vm.name")) > 0);
+
+        for (Provider provider : oldProviders)
+        {
+            if (Security.getProvider(provider.getName()) == null)
+            {
+                Security.addProvider(provider);
+            }
+        }
+
+    }
+
+    @Test
+    public void testMultiUnicode()
+    {
+        String multiUnicode = "(っ＾▿＾)۶\uD83C\uDF78\uD83C\uDF1F\uD83C\uDF7A٩(˘◡˘ ) ❌❌ ❌❌❌";
+        String salt = "(っ＾▿＾)\uD83D\uDCA8 ❌❌ ❌❌❌";
+        String pepper = "O̲ppa̲ (っ-̶●̃益●̶̃)っ ,︵‿ S̲t̲yl̲e̲  (͠≖ ͜ʖ͠≖)\uD83D\uDC4C ❌❌ ❌❌❌";
+
+        Hash hash = Password.hash(multiUnicode).addSalt(salt).addPepper(pepper).withArgon2();
+        Hash hash2 = Password.hash(multiUnicode).addSalt(salt).addPepper(pepper).withArgon2();
+
+        Assert.assertTrue(Password.check(multiUnicode, hash));
+        Assert.assertEquals(hash, hash2);
+    }
+
+
+
+    @Test
+    public void afterMigrationTests()
+    {
+        assertThrows(BadParametersException.class, () -> Password.hash((CharSequence) null));
+        assertThrows(BadParametersException.class, () -> Password.hash((byte[]) null));
+        assertThrows(BadParametersException.class, () -> Password.hash(new byte[0]));
+        assertThrows(BadParametersException.class, () -> Password.check(new byte[]{100, 100, 100}, (byte[]) null));
+        assertThrows(BadParametersException.class, () -> Password.check(new byte[]{100, 100, 100}, new byte[0]));
+        assertThrows(BadParametersException.class, () -> Password.check(null, new byte[]{100, 100, 100}));
+        assertThrows(BadParametersException.class, () -> Password.check(new byte[0], new byte[]{100, 100, 100}));
+        assertFalse(Password.check((byte[]) null, new Hash(MessageDigestFunction.getInstance("MD5"), new byte[0], new byte[0], new byte[0])));
+        assertFalse(Password.check((CharSequence) null, new Hash(MessageDigestFunction.getInstance("MD5"), new byte[0], new byte[0], new byte[0])));
+        assertThrows(BadParametersException.class, () -> Password.check(new byte[0], (Hash) null));
+        Hash emptyHash = new Hash(null, new byte[0], new byte[0], new byte[0]);
+        assertThrows(BadParametersException.class, () -> Password.check(new byte[0], emptyHash));
+    }
+
+    /**
+     *
+     */
+
+    @Test
+    public void testBalloon1()
+    {
+        // GIVEN
+        BalloonHashingFunction balloonHashingFunction = BalloonHashingFunction.getInstance("SHA-256", 16, 20, 0, 4);
+
+
+        // WHEN
+        Hash hash = Password.hash("buildmeupbuttercup").addSalt("JqMcHqUcjinFhQKJ").with(balloonHashingFunction);
+
+        // THEN
+        Assert.assertEquals("2ec8d833db5f88e584ab793950ecfb21657a3816edea8d9e73ea23c13ba2b740", hash.getResult());
+    }
+
+
+    @Test
+    public void testBalloon2()
+    {
+        // GIVEN
+        BalloonHashingFunction balloonHashingFunction = BalloonHashingFunction.getInstance("SHA-256", 24, 18, 0, 5);
+
+
+        // WHEN
+        Hash hash = Password.hash("buildmeupbuttercup").addSalt("JqMcHqUcjinFhQKJ").with(balloonHashingFunction);
+
+        // THEN
+        Assert.assertEquals("69f86890cef40a7ec5f70daff1ce8e2cde233a15bffa785e7efdb5143af51bfb", hash.getResult());
+    }
+
+    @Test
+    public void testBalloon3()
+    {
+        // GIVEN
+        String plainTextPassword = "buttercup";
+        String pepper = "buildmeup";
+        String salt = "JqMcHqUcjinFhQKJ";
+        BalloonHashingFunction balloonHashingFunction = BalloonHashingFunction.getInstance("SHA-256", 24, 18, 7, 5);
+
+
+        // WHEN
+        Hash hash = Password.hash(plainTextPassword).addSalt(salt).addPepper(pepper).with(balloonHashingFunction);
+        String hashed = hash.getResult();
+
+        // THEN
+        Assert.assertTrue(Password.check(plainTextPassword, hash));
+        Assert.assertTrue(Password.check(plainTextPassword, hashed).addPepper(pepper).addSalt(salt).with(balloonHashingFunction));
+    }
+
+    @Test
+    public void testBalloon4()
+    {
+        // GIVEN
+        String plainTextPassword = "buttercup";
+        String pepper = "buildmeup";
+        String salt = "JqMcHqUcjinFhQKJ";
+
+        // WHEN
+        Hash hash = Password.hash(plainTextPassword).addSalt(salt).addPepper(pepper).withBalloonHashing();
+        String hashed = hash.getResult();
+
+        // THEN
+        Assert.assertTrue(Password.check(plainTextPassword, hash));
+        Assert.assertTrue(Password.check(plainTextPassword, hashed).addPepper(pepper).addSalt(salt).withBalloonHashing());
+    }
+
+    @Test
+    public void testRestrictedPermissions()
+    {
+        // GIVEN
+        Policy.setPolicy(new Policy(){
+            @Override
+            public PermissionCollection getPermissions(CodeSource codesource) {
+                Permissions permissions = new Permissions();
+                permissions.add(new RuntimePermission("setSecurityManager"));
+                return permissions;
+            }
+        });
+        System.setSecurityManager(new SecurityManager());
+
+        // WHEN
+        Hash hash1 = Password.hash(PASSWORD).addPepper(PEPPER).addSalt(SALT).withPBKDF2();
+        Hash hash2 = Password.hash(PASSWORD).addPepper(PEPPER).withBcrypt();
+        Hash hash3 = Password.hash(PASSWORD).addPepper(PEPPER).addSalt(SALT).withScrypt();
+
+        // THEN
+        assertTrue(Password.check(PASSWORD, hash1));
+        assertTrue(Password.check(PASSWORD, hash2));
+        assertTrue(Password.check(PASSWORD, hash3));
+
+        System.setSecurityManager(null);
+    }
 }

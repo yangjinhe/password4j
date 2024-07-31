@@ -16,6 +16,12 @@
  */
 package com.password4j;
 
+import com.password4j.types.Argon2;
+import com.password4j.types.Bcrypt;
+import com.password4j.types.Hmac;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.security.NoSuchAlgorithmException;
 import java.security.Provider;
 import java.security.SecureRandom;
@@ -23,13 +29,6 @@ import java.security.Security;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.password4j.types.Argon2;
-import com.password4j.types.Bcrypt;
-import com.password4j.types.Hmac;
 
 
 /**
@@ -58,6 +57,11 @@ public class AlgorithmFinder
      * @since 0.1.0
      */
     private static SecureRandom secureRandom;
+
+    static
+    {
+        initialize();
+    }
 
     private AlgorithmFinder()
     {
@@ -102,12 +106,12 @@ public class AlgorithmFinder
      *   <tr>
      *     <td>Algorithm</td>
      *     <td>hash.pbkdf2.algorithm</td>
-     *     <td>PBKDF2WithHmacSHA512</td>
+     *     <td>PBKDF2WithHmacSHA256</td>
      *   </tr>
      *   <tr>
      *     <td># iterations</td>
      *     <td>hash.pbkdf2.iterations</td>
-     *     <td>64000</td>
+     *     <td>310000</td>
      *   </tr>
      *   <tr>
      *     <td>Key length</td>
@@ -167,9 +171,9 @@ public class AlgorithmFinder
     private static Param internalGetProperties()
     {
         String algorithm = PropertyReader
-                .readString("hash.pbkdf2.algorithm", Hmac.SHA512.name(), "PBKDF2 algorithm is not defined");
-        int iterations = PropertyReader.readInt("hash.pbkdf2.iterations", 64_000, "PBKDF2 #iterations are not defined");
-        int length = PropertyReader.readInt("hash.pbkdf2.length", Hmac.SHA512.bits(), "PBKDF2 key length is not defined");
+                .readString("hash.pbkdf2.algorithm", Hmac.SHA256.name(), "PBKDF2 algorithm is not defined");
+        int iterations = PropertyReader.readInt("hash.pbkdf2.iterations", 310_000, "PBKDF2 #iterations are not defined");
+        int length = PropertyReader.readInt("hash.pbkdf2.length", Hmac.SHA256.bits(), "PBKDF2 key length is not defined");
         return new Param(algorithm, iterations, length);
     }
 
@@ -224,7 +228,7 @@ public class AlgorithmFinder
      *   <tr>
      *     <td>Work Factor (N)</td>
      *     <td>hash.scrypt.workfactor</td>
-     *     <td>32768</td>
+     *     <td>65536</td>
      *   </tr>
      *   <tr>
      *     <td>Resources (r)</td>
@@ -248,7 +252,7 @@ public class AlgorithmFinder
      */
     public static ScryptFunction getScryptInstance()
     {
-        int workFactor = PropertyReader.readInt("hash.scrypt.workfactor", 32_768, "scrypt work factor (N) is not defined");
+        int workFactor = PropertyReader.readInt("hash.scrypt.workfactor", 65_536, "scrypt work factor (N) is not defined");
         int resources = PropertyReader.readInt("hash.scrypt.resources", 8, "scrypt resources (r) is not defined");
         int parallelization = PropertyReader
                 .readInt("hash.scrypt.parallelization", 1, "scrypt parallelization (p) is not defined");
@@ -288,12 +292,12 @@ public class AlgorithmFinder
      *   <tr>
      *     <td>Memory (log2)</td>
      *     <td>hash.argon2.memory</td>
-     *     <td>12</td>
+     *     <td>15</td>
      *   </tr>
      *   <tr>
      *     <td>Iterations</td>
      *     <td>hash.argon2.iterations</td>
-     *     <td>20</td>
+     *     <td>2</td>
      *   </tr>
      *   <tr>
      *     <td>Output Length</td>
@@ -303,7 +307,7 @@ public class AlgorithmFinder
      *   <tr>
      *     <td>Parallelism</td>
      *     <td>hash.argon2.parallelism</td>
-     *     <td>2</td>
+     *     <td>1</td>
      *   </tr>
      *   <tr>
      *     <td>Type</td>
@@ -322,14 +326,24 @@ public class AlgorithmFinder
      */
     public static Argon2Function getArgon2Instance()
     {
-        int memory = PropertyReader.readInt("hash.argon2.memory", 12, "Argon2 memory is not defined");
-        int iterations = PropertyReader.readInt("hash.argon2.iterations", 20, "Argon2 #iterations is not defined");
+        int memory = PropertyReader.readInt("hash.argon2.memory", 15_360, "Argon2 memory is not defined");
+        int iterations = PropertyReader.readInt("hash.argon2.iterations", 2, "Argon2 #iterations is not defined");
         int outputLength = PropertyReader.readInt("hash.argon2.length", 32, "Argon2 output length is not defined");
-        int parallelism = PropertyReader.readInt("hash.argon2.parallelism", 2, "Argon2 parallelism is not defined");
+        int parallelism = PropertyReader.readInt("hash.argon2.parallelism", 1, "Argon2 parallelism is not defined");
         String type = PropertyReader.readString("hash.argon2.type", "id", "Argon2 type is not defined");
         int version = PropertyReader.readInt("hash.argon2.version", 19, "Argon2 version is not defined");
         return Argon2Function
                 .getInstance(memory, iterations, parallelism, outputLength, Argon2.valueOf(type.toUpperCase()), version);
+    }
+
+    public static BalloonHashingFunction getBalloonHashingInstance()
+    {
+        int space = PropertyReader.readInt("hash.balloon.space", 1024, "BalloonHashing memory (space) is not defined");
+        int time = PropertyReader.readInt("hash.balloon.time", 3, "BalloonHashing #iterations (time) is not defined");
+        int parallelism = PropertyReader.readInt("hash.balloon.parallelism", 1, "BalloonHashing parallelism is not defined");
+        int delta = PropertyReader.readInt("hash.balloon.delta", 3, "BalloonHashing delta is not defined");
+        String algorithm = PropertyReader.readString("hash.balloon.algorithm", "SHA-256", "BalloonHashing algorithm is not defined");
+        return BalloonHashingFunction.getInstance(algorithm, space, time, parallelism, delta);
     }
 
     /**
@@ -344,11 +358,16 @@ public class AlgorithmFinder
         List<String> result = new ArrayList<>();
         for (Provider provider : Security.getProviders())
         {
-            for (Provider.Service service : provider.getServices())
+            // Some JDK implementation may return null instead of an empty array.
+            // see https://github.com/Password4j/password4j/issues/120
+            if (provider.getServices() != null)
             {
-                if ("SecretKeyFactory".equals(service.getType()) && service.getAlgorithm().startsWith("PBKDF2"))
+                for (Provider.Service service : provider.getServices())
                 {
-                    result.add(service.getAlgorithm());
+                    if ("SecretKeyFactory".equals(service.getType()) && service.getAlgorithm().startsWith("PBKDF2"))
+                    {
+                        result.add(service.getAlgorithm());
+                    }
                 }
             }
         }
@@ -404,10 +423,5 @@ public class AlgorithmFinder
             this.iterations = iterations;
             this.length = length;
         }
-    }
-
-    static
-    {
-        initialize();
     }
 }

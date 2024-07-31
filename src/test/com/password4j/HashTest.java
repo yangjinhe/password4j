@@ -1,9 +1,9 @@
 package com.password4j;
 
-import java.util.Arrays;
-
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.util.Arrays;
 
 
 public class HashTest
@@ -40,7 +40,7 @@ public class HashTest
         Hash hash = Password.hash("myPassword").withCompressedPBKDF2();
 
         // WHEN
-        boolean result = Password.check(null, hash);
+        boolean result = Password.check((byte[]) null, hash);
 
         // THEN
         Assert.assertFalse(result);
@@ -55,15 +55,15 @@ public class HashTest
         // WHEN
         boolean eq1 = hash.equals(null);
         boolean eq2 = hash.equals(new Object());
-        boolean eq3 = hash.equals(new Hash(AlgorithmFinder.getCompressedPBKDF2Instance(), hash.getResult(), hash.getBytes(), hash.getSalt()));
+        boolean eq3 = hash.equals(new Hash(AlgorithmFinder.getCompressedPBKDF2Instance(), hash.getResult(), hash.getBytes(), hash.getSaltBytes()));
         boolean eq4 = hash.equals(new Hash(AlgorithmFinder.getPBKDF2Instance(), hash.getResult(), hash.getBytes(), hash.getSalt()));
         boolean eq5 = hash.equals(new Hash(AlgorithmFinder.getCompressedPBKDF2Instance(), "hash", hash.getBytes(), hash.getSalt()));
         boolean eq6 = hash.equals(new Hash(AlgorithmFinder.getCompressedPBKDF2Instance(), hash.getResult(), hash.getBytes(), "salt"));
         boolean eq7 = hash.equals(new Hash(AlgorithmFinder.getCompressedPBKDF2Instance(), hash.getResult(), new byte[]{1,2,3,4}, hash.getSalt()));
 
-
         hash.setPepper("pepper");
-        Hash testingHash = new Hash(AlgorithmFinder.getCompressedPBKDF2Instance(), hash.getResult(), hash.getBytes(), hash.getSalt());
+        Hash testingHash = new Hash(AlgorithmFinder.getCompressedPBKDF2Instance(), hash.getResult(), hash.getBytes(), hash.getSaltBytes());
+
         testingHash.setPepper(hash.getPepper());
         boolean eq8 = hash.equals(testingHash);
         hash.setPepper("reppep");
@@ -95,6 +95,8 @@ public class HashTest
         String toString2 = hash2.toString();
         int hc2 = hash2.hashCode();
         String toString3 = hash3.toString();
+        Hash hash4 = new Hash(hash3.getHashingFunction(), hash3.getResult(), hash3.getBytes(), hash3.getSalt());
+
 
         // THEN
         Assert.assertNotNull(toString1);
@@ -102,6 +104,7 @@ public class HashTest
         Assert.assertNotEquals(toString1, toString2);
         Assert.assertNotEquals(toString3, toString2);
         Assert.assertNotEquals(hc1, hc2);
+        Assert.assertNotEquals(hash4, hash3);
     }
 
 }

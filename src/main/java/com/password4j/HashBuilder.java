@@ -25,11 +25,9 @@ package com.password4j;
  */
 public class HashBuilder
 {
-    private CharSequence plainTextPassword;
-
-    private String salt;
-
-    private CharSequence pepper;
+    protected byte[] salt;
+    protected CharSequence pepper;
+    private byte[] plainTextPassword;
 
     @SuppressWarnings("unused")
     private HashBuilder()
@@ -43,7 +41,16 @@ public class HashBuilder
      */
     protected HashBuilder(CharSequence plainTextPassword)
     {
-        this.plainTextPassword = plainTextPassword;
+        this.plainTextPassword = Utils.fromCharSequenceToBytes(plainTextPassword);
+    }
+
+    /**
+     * @param plainTextPasswordAsBytes the plain text password as bytes array
+     * @since 1.7.0
+     */
+    protected HashBuilder(byte[] plainTextPasswordAsBytes)
+    {
+        this.plainTextPassword = plainTextPasswordAsBytes;
     }
 
     /**
@@ -56,7 +63,21 @@ public class HashBuilder
      */
     public HashBuilder addSalt(String salt)
     {
-        this.salt = salt;
+        this.salt = Utils.fromCharSequenceToBytes(salt);
+        return this;
+    }
+
+    /**
+     * Add a cryptographic salt in the hashing process.
+     * The salt is applied differently depending on the chosen algorithm.
+     *
+     * @param saltAsBytes cryptographic salt as bytes array
+     * @return this builder
+     * @since 1.7.0
+     */
+    public HashBuilder addSalt(byte[] saltAsBytes)
+    {
+        this.salt = saltAsBytes;
         return this;
     }
 
@@ -72,7 +93,7 @@ public class HashBuilder
      */
     public HashBuilder addRandomSalt()
     {
-        this.salt = Utils.fromBytesToString(SaltGenerator.generate());
+        this.salt = SaltGenerator.generate();
         return this;
     }
 
@@ -94,7 +115,7 @@ public class HashBuilder
         }
         else
         {
-            this.salt = Utils.fromBytesToString(SaltGenerator.generate(length));
+            this.salt = SaltGenerator.generate(length);
         }
         return this;
     }
@@ -133,7 +154,7 @@ public class HashBuilder
      * This method does not read the configurations in the `psw4j.properties` file.
      *
      * @param hashingFunction a CHF
-     * @return an {@link Hash} object
+     * @return a {@link Hash} object
      * @since 1.0.0
      */
     public Hash with(HashingFunction hashingFunction)
@@ -150,7 +171,7 @@ public class HashBuilder
      * <p>
      * Finally calls {@link #with(HashingFunction)}
      *
-     * @return true if the hash was produced by the given plain text password; false otherwise.
+     * @return a {@link Hash} object
      * @see AlgorithmFinder#getPBKDF2Instance()
      * @see #with(HashingFunction)
      * @since 1.0.0
@@ -169,7 +190,7 @@ public class HashBuilder
      * <p>
      * Finally calls {@link #with(HashingFunction)}
      *
-     * @return true if the hash was produced by the given plain text password; false otherwise.
+     * @return an {@link Hash} object
      * @see AlgorithmFinder#getCompressedPBKDF2Instance()
      * @see #with(HashingFunction)
      * @since 1.0.0
@@ -188,7 +209,7 @@ public class HashBuilder
      * <p>
      * Finally calls {@link #with(HashingFunction)}
      *
-     * @return true if the hash was produced by the given plain text password; false otherwise.
+     * @return an {@link Hash} object
      * @see AlgorithmFinder#getBcryptInstance()
      * @see #with(HashingFunction)
      * @since 1.0.0
@@ -207,7 +228,7 @@ public class HashBuilder
      * <p>
      * Finally calls {@link #with(HashingFunction)}
      *
-     * @return true if the hash was produced by the given plain text password; false otherwise.
+     * @return an {@link Hash} object
      * @see AlgorithmFinder#getScryptInstance()
      * @see #with(HashingFunction)
      * @since 1.0.0
@@ -226,7 +247,7 @@ public class HashBuilder
      * <p>
      * Finally calls {@link #with(HashingFunction)}
      *
-     * @return true if the hash was produced by the given plain text password; false otherwise.
+     * @return a {@link Hash} object
      * @see AlgorithmFinder#getPBKDF2Instance()
      * @see #with(HashingFunction)
      * @since 1.4.0
@@ -245,7 +266,7 @@ public class HashBuilder
      * <p>
      * Finally calls {@link #with(HashingFunction)}
      *
-     * @return true if the hash was produced by the given plain text password; false otherwise.
+     * @return a {@link Hash} object
      * @see AlgorithmFinder#getArgon2Instance()
      * @see #with(HashingFunction)
      * @since 1.5.0
@@ -253,6 +274,25 @@ public class HashBuilder
     public Hash withArgon2()
     {
         return with(AlgorithmFinder.getArgon2Instance());
+    }
+
+    /**
+     * Hashes the previously given plain text password
+     * with {@link BalloonHashingFunction}.
+     * <p>
+     * This method reads the configurations in the `psw4j.properties` file. If no configuration is found,
+     * then the default parameters are used.
+     * <p>
+     * Finally calls {@link #with(HashingFunction)}
+     *
+     * @return a {@link Hash} object
+     * @see AlgorithmFinder#getArgon2Instance()
+     * @see #with(HashingFunction)
+     * @since 1.8.0
+     */
+    public Hash withBalloonHashing()
+    {
+        return with(AlgorithmFinder.getBalloonHashingInstance());
     }
 
 }

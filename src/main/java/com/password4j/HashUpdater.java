@@ -28,6 +28,8 @@ public class HashUpdater
 
     protected HashBuilder hashBuilder;
 
+    private boolean force;
+
     HashUpdater(HashChecker hashChecker, HashBuilder hashBuilder)
     {
         this.hashChecker = hashChecker;
@@ -55,10 +57,25 @@ public class HashUpdater
         {
             throw new BadParametersException("New hashing function cannot be null.");
         }
+
+        boolean toBeUpdated = force || //
+                !oldHashingFunction.equals(newHashingFunction) //
+                || hashBuilder.salt != null //
+                || hashBuilder.pepper != null;
+
         if (hashChecker.with(oldHashingFunction))
         {
-            Hash hash = this.hashBuilder.with(newHashingFunction);
-            return new HashUpdate(hash);
+            if (toBeUpdated)
+            {
+                Hash hash = this.hashBuilder.with(newHashingFunction);
+                return new HashUpdate(hash, true);
+            }
+            else
+            {
+                Hash hash = new Hash(oldHashingFunction, hashChecker.hashed, null, hashChecker.salt);
+                return new HashUpdate(hash, false);
+            }
+
         }
         else
         {
@@ -76,6 +93,19 @@ public class HashUpdater
     public HashUpdater addNewSalt(String salt)
     {
         this.hashBuilder.addSalt(salt);
+        return this;
+    }
+
+    /**
+     * Adds new cryptographic salt to be applied in the hash update.
+     *
+     * @param saltAsBytes cryptographic salt as bytes array
+     * @return this builder
+     * @since 1.3.0
+     */
+    public HashUpdater addNewSalt(byte[] saltAsBytes)
+    {
+        this.hashBuilder.addSalt(saltAsBytes);
         return this;
     }
 
@@ -134,6 +164,19 @@ public class HashUpdater
     public HashUpdater addNewPepper(CharSequence pepper)
     {
         this.hashBuilder.addPepper(pepper);
+        return this;
+    }
+
+    /**
+     * Forces the update of the hash even if function, salt and pepper did not change.
+     * This can be helpful with algorithm like Bcrypt that generates their own salt.
+     *
+     * @return this builder
+     * @since 1.7.0
+     */
+    public HashUpdater forceUpdate()
+    {
+        this.force = true;
         return this;
     }
 
@@ -365,5 +408,43 @@ public class HashUpdater
     public HashUpdate withArgon2(HashingFunction newHashingFunction)
     {
         return with(Argon2Function.getInstanceFromHash(hashChecker.getHashed()), newHashingFunction);
+    }
+
+    /**
+     * Hashes the previously given plain text password
+     * with {@link BalloonHashingFunction}.
+     * <p>
+     * This method reads the configurations in the `psw4j.properties` file. If no configuration is found,
+     * then the default parameters are used.
+     * <p>
+     * Finally calls {@link #with(HashingFunction, HashingFunction)}
+     *
+     * @return the result of the verification with the new hash
+     * @see AlgorithmFinder#getBalloonHashingInstance()
+     * @see #with(HashingFunction, HashingFunction)
+     * @since 1.5.0
+     */
+    public HashUpdate withBalloonHashing()
+    {
+        return withBalloonHashing(AlgorithmFinder.getBalloonHashingInstance());
+    }
+
+    /**
+     * Hashes the previously given plain text password
+     * with {@link BalloonHashingFunction}.
+     * <p>
+     * This method reads the configurations in the `psw4j.properties` file. If no configuration is found,
+     * then the default parameters are used.
+     * <p>
+     * Finally calls {@link #with(HashingFunction, HashingFunction)}
+     *
+     * @return the result of the verification with the new hash
+     * @see AlgorithmFinder#getBalloonHashingInstance()
+     * @see #with(HashingFunction, HashingFunction)
+     * @since 1.5.0
+     */
+    public HashUpdate withBalloonHashing(HashingFunction newHashingFunction)
+    {
+        return with(AlgorithmFinder.getBalloonHashingInstance(), newHashingFunction);
     }
 }

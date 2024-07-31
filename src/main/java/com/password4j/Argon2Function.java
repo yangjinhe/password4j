@@ -16,20 +16,13 @@
  */
 package com.password4j;
 
+import com.password4j.types.Argon2;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-
-import org.apache.commons.lang3.StringUtils;
-
-import com.password4j.types.Argon2;
+import java.util.concurrent.*;
 
 
 /**
@@ -58,24 +51,16 @@ public class Argon2Function extends AbstractHashingFunction
     private static final int ARGON2_BLOCK_SIZE = 1024;
 
     public static final int ARGON2_QWORDS_IN_BLOCK = ARGON2_BLOCK_SIZE / 8;
-
     private final int iterations;
-
     private final int memory;
-
     private final long[][] initialBlockMemory;
-
     private final int parallelism;
-
     private final int outputLength;
-
     private final int segmentLength;
-
     private final Argon2 variant;
-
     private final int version;
-
     private final int laneLength;
+    private ExecutorService service;
 
     Argon2Function(int memory, int iterations, int parallelism, int outputLength, Argon2 variant, int version)
     {
@@ -102,6 +87,11 @@ public class Argon2Function extends AbstractHashingFunction
         for (int i = 0; i < memoryBlocks; i++)
         {
             initialBlockMemory[i] = new long[ARGON2_QWORDS_IN_BLOCK];
+        }
+
+        if (parallelism >= 1)
+        {
+            service = Utils.createExecutorService();
         }
     }
 
@@ -136,7 +126,7 @@ public class Argon2Function extends AbstractHashingFunction
      * @since 1.5.0
      */
     public static Argon2Function getInstance(int memory, int iterations, int parallelism, int outputLength, Argon2 type,
-            int version)
+                                             int version)
     {
         String key = getUID(memory, iterations, parallelism, outputLength, type, version);
         if (INSTANCES.containsKey(key))
@@ -253,8 +243,8 @@ public class Argon2Function extends AbstractHashingFunction
     }
 
     private static void roundFunction(long[] block, int v0, int v1, int v2, int v3, int v4, int v5, int v6, int v7, int v8,
-            int v9, // NOSONAR
-            int v10, int v11, int v12, int v13, int v14, int v15)
+                                      int v9, // NOSONAR
+                                      int v10, int v11, int v12, int v13, int v14, int v15)
     {
         f(block, v0, v4, v8, v12);
         f(block, v1, v5, v9, v13);
@@ -302,12 +292,12 @@ public class Argon2Function extends AbstractHashingFunction
         String[] parts = hash.split("\\$");
         if (parts.length == 6)
         {
-            result[0] = StringUtils.removeStart(parts[1], "argon2");
+            result[0] = remove(parts[1], "argon2");
             String[] params = parts[3].split(",");
-            result[1] = Integer.parseInt(StringUtils.removeStart(parts[2], "v="));
-            result[2] = Integer.parseInt(StringUtils.removeStart(params[0], "m="));
-            result[3] = Integer.parseInt(StringUtils.removeStart(params[1], "t="));
-            result[4] = Integer.parseInt(StringUtils.removeStart(params[2], "p="));
+            result[1] = Integer.parseInt(remove(parts[2], "v="));
+            result[2] = Integer.parseInt(remove(params[0], "m="));
+            result[3] = Integer.parseInt(remove(params[1], "t="));
+            result[4] = Integer.parseInt(remove(params[2], "p="));
             result[5] = Utils.decodeBase64(parts[4]);
             result[6] = Utils.decodeBase64(parts[5]);
             return result;
@@ -325,8 +315,20 @@ public class Argon2Function extends AbstractHashingFunction
                 .name() + ", v=" + version;
     }
 
+    private static String remove(String source, String remove)
+    {
+        return source.substring(remove.length());
+    }
+
     @Override
     public Hash hash(CharSequence plainTextPassword)
+    {
+        byte[] salt = SaltGenerator.generate();
+        return internalHash(Utils.fromCharSequenceToBytes(plainTextPassword), salt, null);
+    }
+
+    @Override
+    public Hash hash(byte[] plainTextPassword)
     {
         byte[] salt = SaltGenerator.generate();
         return internalHash(plainTextPassword, salt, null);
@@ -339,25 +341,35 @@ public class Argon2Function extends AbstractHashingFunction
     }
 
     @Override
-    public Hash hash(CharSequence plainTextPassword, String salt, CharSequence pepper)
+    public Hash hash(byte[] plainTextPassword, byte[] salt)
     {
-        return internalHash(plainTextPassword, Utils.fromCharSequenceToBytes(salt), pepper);
+        return hash(plainTextPassword, salt, null);
     }
 
-    private Hash internalHash(CharSequence plainTextPassword, byte[] salt, CharSequence pepper)
+    @Override
+    public Hash hash(CharSequence plainTextPassword, String salt, CharSequence pepper)
     {
-        byte[] password = Utils.fromCharSequenceToBytes(plainTextPassword);
+        return internalHash(Utils.fromCharSequenceToBytes(plainTextPassword), Utils.fromCharSequenceToBytes(salt), pepper);
+    }
+
+    @Override
+    public Hash hash(byte[] plainTextPassword, byte[] salt, CharSequence pepper)
+    {
+        return internalHash(plainTextPassword, salt, pepper);
+    }
+
+    private Hash internalHash(byte[] plainTextPassword, byte[] salt, CharSequence pepper)
+    {
         long[][] blockMemory = copyOf(initialBlockMemory);
 
         if (salt == null)
         {
             salt = SaltGenerator.generate();
         }
-        String theSalt = Utils.fromBytesToString(salt);
-        initialize(password, salt, Utils.fromCharSequenceToBytes(pepper), null, blockMemory);
+        initialize(plainTextPassword, salt, Utils.fromCharSequenceToBytes(pepper), null, blockMemory);
         fillMemoryBlocks(blockMemory);
         byte[] hash = ending(blockMemory);
-        Hash result = new Hash(this, encodeHash(hash, theSalt), hash, theSalt);
+        Hash result = new Hash(this, encodeHash(hash, salt), hash, salt);
         result.setPepper(pepper);
         return result;
     }
@@ -365,26 +377,40 @@ public class Argon2Function extends AbstractHashingFunction
     @Override
     public boolean check(CharSequence plainTextPassword, String hashed)
     {
-        Object[] params = decodeHash(hashed);
-        return check(plainTextPassword, hashed, Utils.fromBytesToString((byte[]) params[5]), null);
+        return check(plainTextPassword, hashed, null, null);
+    }
+
+    @Override
+    public boolean check(byte[] plainTextPassword, byte[] hashed)
+    {
+        return check(plainTextPassword, hashed, null, null);
     }
 
     @Override
     public boolean check(CharSequence plainTextPassword, String hashed, String salt, CharSequence pepper)
     {
-        String theSalt;
-        if (salt == null)
+        byte[] plainTextPasswordAsBytes = Utils.fromCharSequenceToBytes(plainTextPassword);
+        byte[] saltAsBytes = Utils.fromCharSequenceToBytes(salt);
+        byte[] hashedAsBytes = Utils.fromCharSequenceToBytes(hashed);
+        return check(plainTextPasswordAsBytes, hashedAsBytes, saltAsBytes, pepper);
+    }
+
+    @Override
+    public boolean check(byte[] plainTextPassword, byte[] hashed, byte[] salt, CharSequence pepper)
+    {
+        byte[] theSalt;
+        if (salt == null || salt.length == 0)
         {
-            Object[] params = decodeHash(hashed);
-            theSalt = Utils.fromBytesToString((byte[]) params[5]);
+            Object[] params = decodeHash(Utils.fromBytesToString(hashed));
+            theSalt = (byte[]) params[5];
         }
         else
         {
             theSalt = salt;
         }
 
-        Hash internalHash = hash(plainTextPassword, theSalt, pepper);
-        return slowEquals(internalHash.getResult(), hashed);
+        Hash internalHash = internalHash(plainTextPassword, theSalt, pepper);
+        return slowEquals(internalHash.getResultAsBytes(), hashed);
     }
 
     /**
@@ -463,8 +489,8 @@ public class Argon2Function extends AbstractHashingFunction
         byte[] initialHash = new byte[64];
         blake2b.doFinal(initialHash, 0);
 
-        final byte[] zeroBytes = { 0, 0, 0, 0 };
-        final byte[] oneBytes = { 1, 0, 0, 0 };
+        final byte[] zeroBytes = {0, 0, 0, 0};
+        final byte[] oneBytes = {1, 0, 0, 0};
 
         byte[] initialHashWithZeros = getInitialHashLong(initialHash, zeroBytes);
         byte[] initialHashWithOnes = getInitialHashLong(initialHash, oneBytes);
@@ -562,8 +588,6 @@ public class Argon2Function extends AbstractHashingFunction
 
     private void fillMemoryBlockMultiThreaded(long[][] blockMemory)
     {
-
-        ExecutorService service = Executors.newFixedThreadPool(parallelism);
         List<Future<?>> futures = new ArrayList<>();
 
         for (int i = 0; i < iterations; i++)
@@ -595,8 +619,6 @@ public class Argon2Function extends AbstractHashingFunction
                 }
             }
         }
-
-        service.shutdownNow();
     }
 
     private void fillSegment(int pass, int lane, int slice, long[][] blockMemory)
@@ -667,7 +689,7 @@ public class Argon2Function extends AbstractHashingFunction
     }
 
     private long getPseudoRandom(int index, long[] addressBlock, long[] inputBlock, long[] zeroBlock, int prevOffset,
-            boolean dataIndependentAddressing, long[][] blockMemory)
+                                 boolean dataIndependentAddressing, long[][] blockMemory)
     {
         if (dataIndependentAddressing)
         {
@@ -695,7 +717,7 @@ public class Argon2Function extends AbstractHashingFunction
     }
 
     private void initAddressBlocks(int pass, int lane, int slice, long[] zeroBlock, long[] inputBlock, long[] addressBlock,
-            long[][] blockMemory)
+                                   long[][] blockMemory)
     {
         inputBlock[0] = Utils.intToLong(pass);
         inputBlock[1] = Utils.intToLong(lane);
@@ -802,11 +824,11 @@ public class Argon2Function extends AbstractHashingFunction
         return current;
     }
 
-    private String encodeHash(byte[] hash, String salt)
+    private String encodeHash(byte[] hash, byte[] salt)
     {
         return "$argon2" + variant.name()
                 .toLowerCase() + "$v=" + version + "$m=" + memory + ",t=" + iterations + ",p=" + parallelism + "$"
-                + Utils.encodeBase64(Utils.fromCharSequenceToBytes(salt), false) + "$"
+                + Utils.encodeBase64(salt, false) + "$"
                 + Utils.encodeBase64(hash, false);
     }
 

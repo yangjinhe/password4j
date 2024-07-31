@@ -1,11 +1,13 @@
 package com.password4j;
 
 import com.password4j.types.Bcrypt;
-import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.Base64;
+import java.util.Properties;
+
+import static org.junit.Assert.assertEquals;
 
 
 public class ScryptFunctionTest
@@ -46,8 +48,8 @@ public class ScryptFunctionTest
         byte[] bytes = hash.getBytes();
 
         // THEN
-        String expected = "$s0$e0801$c2FsdA==$dFcxr0SE8yOWiWntoomu7gBbWQOsVh5kpayhIXl793NO+f1YQi4uIhg7ysup7Ie6DIO3oueI8Dzg2gZGNDPNpg==";
-        byte[] expectedBytes = Base64.getDecoder().decode(expected.split("\\$")[4]);
+        String expected = "$e0801$c2FsdA==$dFcxr0SE8yOWiWntoomu7gBbWQOsVh5kpayhIXl793NO+f1YQi4uIhg7ysup7Ie6DIO3oueI8Dzg2gZGNDPNpg==";
+        byte[] expectedBytes = Base64.getDecoder().decode(expected.split("\\$")[3]);
         Assert.assertEquals(expected, result);
         Assert.assertArrayEquals(expectedBytes, bytes);
 
@@ -61,7 +63,7 @@ public class ScryptFunctionTest
 
         // WHEN
         boolean result = new ScryptFunction(16384, 8, 1)
-                .check(password, "$s0$e0801$c2FsdA==$dFcxr0SE8yOWiWntoomu7gBbWQOsVh5kpayhIXl793NO+f1YQi4uIhg7ysup7Ie6DIO3oueI8Dzg2gZGNDPNpg==");
+                .check(password, "$e0801$c2FsdA==$dFcxr0SE8yOWiWntoomu7gBbWQOsVh5kpayhIXl793NO+f1YQi4uIhg7ysup7Ie6DIO3oueI8Dzg2gZGNDPNpg==");
 
         // THEN
         Assert.assertTrue(result);
@@ -75,7 +77,7 @@ public class ScryptFunctionTest
         String salt = "salt";
 
         // WHEN
-        boolean result = new ScryptFunction(16384, 8, 1).check(password, "$s0$e0801$c2FsdA==$c2FsdA==");
+        boolean result = new ScryptFunction(16384, 8, 1).check(password, "$e0801$c2FsdA==$c2FsdA==");
 
         // THEN
         Assert.assertFalse(result);
@@ -92,7 +94,7 @@ public class ScryptFunctionTest
         Hash hash = sCryptFunction.hash(password);
 
         // THEN
-        Assert.assertTrue(StringUtils.isNotEmpty(hash.getSalt()));
+        Assert.assertTrue(hash.getSalt() != null && hash.getSalt().length() > 0);
         Assert.assertEquals(sCryptFunction, ScryptFunction.getInstanceFromHash(hash.getResult()));
     }
 
@@ -107,7 +109,7 @@ public class ScryptFunctionTest
         Hash hash = new ScryptFunction(16384, 8, 1).hash(password, salt);
 
         // THEN
-        Assert.assertFalse(hash.getHashingFunction().check(password, "$s0$e0801$c2FsdA==$YXNkYXNkYXNkYXNk"));
+        Assert.assertFalse(hash.getHashingFunction().check(password, "$e0801$c2FsdA==$YXNkYXNkYXNkYXNk"));
     }
 
     @Test
@@ -156,9 +158,9 @@ public class ScryptFunctionTest
 
         // THEN
         Assert.assertEquals(13_440, scrypt1.getRequiredBytes());
-        Assert.assertTrue(StringUtils.contains(scrypt1.getRequiredMemory(), "KB"));
+        Assert.assertTrue(scrypt1.getRequiredMemory().indexOf("KB") > 0);
         Assert.assertEquals(1_344_000, scrypt2.getRequiredBytes());
-        Assert.assertTrue(StringUtils.contains(scrypt2.getRequiredMemory(), "MB"));
+        Assert.assertTrue(scrypt2.getRequiredMemory().indexOf("MB") > 0);
         Assert.assertEquals(128, scrypt3.getRequiredBytes());
         Assert.assertEquals("128B", scrypt3.getRequiredMemory());
     }
@@ -227,7 +229,7 @@ public class ScryptFunctionTest
         // GIVEN
 
         // WHEN
-        new ScryptFunction(16384, 8, 1).check("password", "$s0e0801$c2FsdA==$dFcxr0SE8yOWiWntoomu7gBbWQOsVh5kpayhIXl793NO+f1YQi4uIhg7ysup7Ie6DIO3oueI8Dzg2gZGNDPNpg==");
+        new ScryptFunction(16384, 8, 1).check("password", "$e0801c2FsdA==$dFcxr0SE8yOWiWntoomu7gBbWQOsVh5kpayhIXl793NO+f1YQi4uIhg7ysup7Ie6DIO3oueI8Dzg2gZGNDPNpg==");
     }
 
     @Test
@@ -249,5 +251,26 @@ public class ScryptFunctionTest
         Assert.assertEquals(derivedKeyLength, scrypt.getDerivedKeyLength());
         Assert.assertEquals("ScryptFunction(N=3, r=5, p=7, l=32)", scrypt.toString());
     }
+
+    @Test
+    public void testOWASP()
+    {
+        // GIVEN
+        Properties oldProps = PropertyReader.properties;
+        PropertyReader.properties = null;
+
+        // WHEN
+        ScryptFunction scrypt = AlgorithmFinder.getScryptInstance();
+
+        // THEN
+        assertEquals(1 << 16, scrypt.getWorkFactor());
+        assertEquals(8, scrypt.getResources());
+        assertEquals(1, scrypt.getParallelization());
+        assertEquals(ScryptFunction.DERIVED_KEY_LENGTH, scrypt.getDerivedKeyLength());
+
+        PropertyReader.properties = oldProps;
+    }
+
+
 
 }

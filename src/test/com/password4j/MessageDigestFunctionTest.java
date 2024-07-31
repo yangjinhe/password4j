@@ -128,6 +128,23 @@ public class MessageDigestFunctionTest
 
         // THEN
         assertEquals(SaltOption.APPEND, function.getSaltOption());
+        PropertyReader.properties.setProperty("hash.md.salt.option", "append");
+    }
+
+    @Test
+    public void testMDRightSaltOption()
+    {
+        // GIVEN
+
+        PropertyReader.properties.setProperty("hash.md.salt.option", "prepend");
+
+        // WHEN
+        MessageDigestFunction function = AlgorithmFinder.getMessageDigestInstance();
+
+        // THEN
+        assertEquals(SaltOption.PREPEND, function.getSaltOption());
+        PropertyReader.properties.setProperty("hash.md.salt.option", "append");
+
     }
 
 
@@ -146,7 +163,7 @@ public class MessageDigestFunctionTest
     }
 
 
-    @Test(expected = BadParametersException.class)
+    @Test
     public void testPBKDF2WrongCheck2()
     {
         // GIVEN
@@ -158,7 +175,11 @@ public class MessageDigestFunctionTest
         HashingFunction strategy = CompressedPBKDF2Function.getInstanceFromHash(hashed);
 
         // THEN
-        Assert.assertTrue(strategy.check(userSubmittedPassword, badHash));
+        try {
+            Assert.assertTrue(strategy.check(userSubmittedPassword, badHash));
+        } catch (BadParametersException ex) {
+            assertEquals("`" + badHash + "` is not a valid hash", ex.getMessage());
+        }
     }
 
 
